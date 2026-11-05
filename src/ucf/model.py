@@ -218,19 +218,28 @@ class UCFFlow(nn.Module):
         direction = self.raw_direction(state,t,cond)
         return project(self.path_apply(direction,t,cond,derivative=True,detach=detach_schedule),cond['mask'])
 
-    def integrate(self, cond, steps=2, solver='euler'):
+    def integrate(self, cond, steps=2, solver='euler', return_endpoints=False):
         if not isinstance(steps, int) or steps < 1 or solver not in ('euler','heun'):
             raise ValueError('Positive integer steps and euler/heun solver required')
+        if return_endpoints and (solver != 'euler' or steps < 2):
+            raise ValueError('Trajectory endpoint supervision requires at least two Euler steps')
         state = torch.zeros_like(cond['adapted'], dtype=torch.float32)
+        endpoints = []
         for i in range(steps):
             t = state.new_full((len(state),), i/steps)
-            v = self.velocity(state, t, cond)
+            if return_endpoints:
+                direction = self.raw_direction(state, t, cond)
+                v = project(self.path_apply(direction, t, cond, derivative=True), cond['mask'])
+                if i > 0:
+                    endpoints.append(state + project(direction-self.path_apply(direction, t, cond), cond['mask']))
+            else:
+                v = self.velocity(state, t, cond)
             proposal = state+v/steps
             if solver == 'heun':
                 v2 = self.velocity(proposal, t+1/steps, cond)
                 proposal = state+(v+v2)/(2*steps)
             state = proposal
-        return state
+        return (state, endpoints) if return_endpoints else state
 
     def predict(self, mri, anchor, steps=2, solver='euler', support=None):
         cond = self.conditions(mri, anchor, support=support)

@@ -5,7 +5,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 import torch
 from ucf.model import UCFFlow,project,scale_interior_hhh
 from ucf.coupling import apply_operator
-from ucf.losses import objective,terminal_detail_loss
+from ucf.losses import objective,terminal_detail_loss,terminal_high_loss,ct_structure_losses
 from wave_tools import haar
 import json
 
@@ -153,5 +153,44 @@ class CoupledTests(unittest.TestCase):
         result=scale_interior_hhh(waves,mask,.2)
         torch.testing.assert_close(result[:,:7],waves[:,:7])
         torch.testing.assert_close(result[0,7,0,0],torch.tensor([.2,1.]))
+
+    def test_signed_high_endpoint_loss_includes_first_order_bands(self):
+        target = torch.zeros(1, 8, 2, 2, 2)
+        target[:, 1:] = 1
+        pred = -target.clone().requires_grad_()
+        loss = terminal_high_loss(pred, target, torch.ones(1, 1, 4, 4, 4), torch.ones(8))
+        self.assertAlmostEqual(float(loss.detach()), 2.)
+        self.assertEqual(float(terminal_high_loss(target, target, torch.ones(1, 1, 4, 4, 4), torch.ones(8))), 0.)
+
+    def test_trajectory_trace_reuses_deployed_euler_updates(self):
+        model = self.make(conditioning_input='residual_matrix', coupled_bridge=False,
+                          spatial_schedule=True, schedule_lll=True)
+        with torch.no_grad():
+            model.decoders['pet'][-1].weight.normal_(std=.02)
+        x = torch.rand(1, 1, 8, 12, 8)
+        cond = model.conditions(x, x*.2)
+        state = model.integrate(cond, 2, 'euler')
+        traced, endpoints = model.integrate(cond, 2, 'euler', return_endpoints=True)
+        torch.testing.assert_close(traced, state, rtol=0, atol=0)
+        self.assertEqual(len(endpoints), 1)
+        endpoints[0].square().mean().backward()
+        self.assertGreater(float(model.decoders['pet'][-1].weight.grad.abs().sum()), 0.)
+
+    def test_ct_structure_losses_penalize_missing_edges_and_ignore_outside_support(self):
+        target = torch.full((1, 1, 4, 4, 4), -1.)
+        target[:, :, 2:] = .2
+        mask = torch.ones_like(target)
+        mask[..., -1] = 0
+        same = ct_structure_losses(target, target, mask)
+        self.assertEqual(sum(float(v) for v in same), 0.)
+        smooth = target.clone()
+        smooth[:, :, 1] = -.6
+        smooth[:, :, 2] = -.2
+        smooth.requires_grad_()
+        bone, edge = ct_structure_losses(smooth, target, mask)
+        self.assertGreater(float(bone.detach()), 0.)
+        self.assertGreater(float(edge.detach()), 0.)
+        (bone+edge).backward()
+        self.assertEqual(float(smooth.grad[..., -1].abs().sum()), 0.)
 
 if __name__=='__main__':unittest.main()
