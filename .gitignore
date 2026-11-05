@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.env
+.env.*
+runs/
+data/
+weights/
+checkpoints/
+*.pt
+*.pth
+*.nii
+*.nii.gz
+*.log

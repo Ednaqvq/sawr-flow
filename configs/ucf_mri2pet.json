@@ -1,0 +1,42 @@
+{
+  "seed": 42,
+  "spatial_size": [160, 196, 160],
+  "model": {
+    "channels": [24, 48, 72, 96],
+    "time_dim": 128,
+    "token_dim": 32,
+    "heads": 4,
+    "checkpointing": true,
+    "cfam": true,
+    "dynamic": true,
+    "residual_scale": 0.1
+  },
+  "training": {
+    "epochs": 60,
+    "batch_size": 1,
+    "accumulation_steps": 4,
+    "lr": 0.0001,
+    "weight_decay": 0.0001,
+    "grad_clip": 1.0,
+    "patience": 12,
+    "lr_patience": 3,
+    "min_delta": 0.00001,
+    "precision": "bf16",
+    "cpu_threads": 8
+  },
+  "loss": {
+    "huber_bands": [3, 5, 6, 7],
+    "anchor_probability": 0.5,
+    "steps": 2,
+    "solver": "euler",
+    "weights": {
+      "fm": 1.0,
+      "endpoint": 0.25,
+      "rollout": 1.0,
+      "ssim": 0.2,
+      "cfam": 0.1,
+      "spectrum": 0.05,
+      "schedule": 0.001
+    }
+  }
+}
