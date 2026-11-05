@@ -43,14 +43,8 @@ def validate_config(cfg):
     if loss['huber_bands'] not in ([],[3,5,6,7],list(range(8))):
         raise ValueError('Huber bands must be [] (MSE), [3,5,6,7], or all eight bands')
     required_weights = {'fm','endpoint','rollout','ssim','cfam','spectrum','schedule'}
-    optional_weights = {'final_detail', 'final_high', 'gradient', 'trajectory', 'bone', 'edge'}
-    if not required_weights <= set(loss['weights']) <= required_weights|optional_weights:
+    if not required_weights <= set(loss['weights']) <= required_weights|{'final_detail'}:
         raise ValueError('Incorrect loss weights')
-    if loss['weights'].get('trajectory', 0) and (loss['solver'] != 'euler' or loss['steps'] < 2
-                                                or cfg.get('architecture', 'ucf') != 'ucf'):
-        raise ValueError('Trajectory supervision requires UCF with at least two Euler steps')
-    if (loss['weights'].get('bone', 0) or loss['weights'].get('edge', 0)) and cfg['model']['targets'] != ['ct']:
-        raise ValueError('Bone and edge thresholds require the configured CT HU scale')
     if any(not math.isfinite(v) or v<0 for v in loss['weights'].values()):
         raise ValueError('Loss weights must be finite and nonnegative')
     if cfg['model']['dynamic'] and loss['weights']['rollout']<=0:
@@ -122,24 +116,6 @@ def train(args):
     atomic_json(run/'config.json',cfg)
     cache = AnchorCache(anchor,args.anchor_cache or run/'anchor_cache',tr['precision'])
     model = build_model(cfg).to(device)
-    initialization = None
-    if args.init_checkpoint and args.resume:
-        recorded = run/'initialization.json'
-        if not recorded.is_file() or json.loads(recorded.read_text())['checkpoint_sha256'] != sha(args.init_checkpoint):
-            raise ValueError('Resumed initialization differs from the recorded checkpoint')
-    if args.init_checkpoint and not args.resume:
-        initial = torch.load(args.init_checkpoint, map_location='cpu', weights_only=True)
-        if initial.get('format_version') != 'ucf-mri2pet-v1' or initial['anchor_sha256'] != anchor.digest:
-            raise ValueError('Initialization must use the same frozen anchor')
-        if initial['config']['model'] != cfg['model'] or initial['config']['spatial_size'] != cfg['spatial_size']:
-            raise ValueError('Initialization model configuration differs')
-        if set(initial['training_subjects']) != set(train_ds.rows.subject_id) or set(initial['validation_subjects']) != set(val_ds.rows.subject_id):
-            raise ValueError('Initialization split membership differs')
-        model.load_state_dict(initial['model'], strict=True)
-        initialization = dict(checkpoint_sha256=sha(args.init_checkpoint), source_epoch=initial['epoch'])
-        if (run/'initialization.json').exists() and json.loads((run/'initialization.json').read_text()) != initialization:
-            raise ValueError('Initialization checkpoint changed')
-        atomic_json(run/'initialization.json', initialization)
     optimizer = torch.optim.AdamW(model.parameters(),lr=tr['lr'],weight_decay=tr['weight_decay'])
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,factor=.5,
                              patience=tr['lr_patience'],min_lr=1e-6)
@@ -158,13 +134,8 @@ def train(args):
         torch.set_rng_state(saved['rng_cpu'])
         if device.type=='cuda':
             torch.cuda.set_rng_state_all(saved['rng_cuda'])
-    elif initialization is not None:
-        thresholds = initial['thresholds'].to(device)
     else:
         thresholds = fit_thresholds(train_ds,cache,device,tr['precision'],model)
-    initialization_path = run/'initialization.json'
-    if initialization_path.exists():
-        initialization = json.loads(initialization_path.read_text())
     statistics = dict(fit_split='train', thresholds=thresholds.tolist(),
                       sample_ids=train_ds.rows.sample_id.tolist(), residual_scale=model.scale)
     if hasattr(model, 'condition_rms'):
@@ -178,7 +149,7 @@ def train(args):
                     epoch=epoch,anchor_sha256=anchor.digest,thresholds=thresholds.cpu(),
                     training_subjects=sorted(train_ds.rows.subject_id.unique().tolist()),
                     validation_subjects=sorted(val_ds.rows.subject_id.unique().tolist()),
-                    training_cohort=anchor.cfg.get('cohort','unknown'), initialization=initialization)
+                    training_cohort=anchor.cfg.get('cohort','unknown'))
 
     if not args.resume:
         summary, rows = evaluate(model,anchor,val_loader,device,tr['precision'],
@@ -261,7 +232,6 @@ def main():
     p.add_argument('--device',default='cuda:0')
     p.add_argument('--seed',type=int)
     p.add_argument('--resume',action='store_true')
-    p.add_argument('--init-checkpoint',help='Initialize a fresh fine-tuning run with matching model, anchor and subjects')
     p.add_argument('--tensor-cache',help='Shared lossless FP32 paired-volume cache')
     p.add_argument('--anchor-cache',help='Shared content-addressed frozen anchor cache')
     p.add_argument('--no-cfam',action='store_true')

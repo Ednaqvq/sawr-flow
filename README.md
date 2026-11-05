@@ -101,29 +101,3 @@ All rows use the same 18 held-out SynthRAD cases and frozen CT anchor. Residual 
 | CST-Flow with eight-band scheduling | **46.83** | **29.468** | **0.90507** | 3.791 |
 
 Eight-band scheduling reduced the mean full-volume MAE by 0.83 HU relative to seven-band scheduling and improved seven subbands. Seven-band scheduling had the lowest HHH error on this split.
-
-## Detail refinement
-
-`configs/cst_mri2ct_detail_finetune.json` adds eight refinement epochs to a trained MRI-to-CT model. It supervises signed high-frequency residual endpoints, terminal estimates made from the model's own rollout states, CT bone neighbourhoods, and signed CT gradients at strong reference edges. Training thresholds are 300 HU for bone and 200 HU per voxel for strong edges. Target CT is used for supervision and evaluation.
-
-```bash
-CUDA_VISIBLE_DEVICES=0 python train_ucf.py \
-  --config configs/cst_mri2ct_detail_finetune.json \
-  --metadata data/split.csv --dataset-root data \
-  --anchor runs/anchor/frozen/fold_0/flow/best.pt \
-  --init-checkpoint runs/cst/last.pt \
-  --tensor-cache runs/cache/pairs --anchor-cache runs/cache/anchors \
-  --run-dir runs/cst_detail
-```
-
-Initialization verifies the model configuration, frozen anchor, and training/validation subjects, and retains the training-only normalization statistics. Refinement creates a fresh optimizer. Add `--resume` to continue the same refinement run. Use `runs/cst_detail/last.pt` with the inference and evaluation commands above. Deployment still uses two Euler steps.
-
-Two bone/edge weights, 0.15 and 0.30, were compared on the 18-case validation set. The selected weight, 0.30, had the lower edge-gradient error while satisfying the predefined full-MAE, bone, edge and high-band error checks. This selected candidate was then evaluated on the 18 held-out cases.
-
-| Model | Full MAE ↓ (HU) | Bone MAE ↓ (HU) | Strong-edge MAE ↓ (HU) | Edge gradient / reference ↑ |
-|---|---:|---:|---:|---:|
-| Original 15-epoch CST | 46.83 | 335.28 | 275.87 | 0.443 |
-| Same additional epochs with original losses | **45.25** | 307.29 | 265.46 | 0.477 |
-| Structure-supervised refinement | 45.71 | **289.60** | **262.86** | **0.521** |
-
-Bone metrics use reference CT above 300 HU within the eroded patient outline. Evaluation edges are the strongest 15% of reference gradients within that outline. Relative to matched continued training, refinement reduced bone MAE by 17.70 HU and edge-gradient error by 12.96 HU/mm, with full MAE higher by 0.46 HU. Fine skull and sinus structures still show incomplete recovery.
