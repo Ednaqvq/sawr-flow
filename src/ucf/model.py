@@ -90,7 +90,7 @@ class UCFFlow(nn.Module):
         if conditioning_input not in ('matrix', 'concat', 'residual_matrix'):
             raise ValueError('Unknown conditioning input')
         if (conditioning_input != 'matrix' or spatial_schedule) and (transport != 'coupled' or coupled_bridge):
-            raise ValueError('Independent CST conditioning and scheduling require coupled transport with coupled_bridge disabled')
+            raise ValueError('Independent SAWR conditioning and scheduling require coupled transport with coupled_bridge disabled')
         if schedule_lll and not spatial_schedule:
             raise ValueError('LLL scheduling requires the spatial schedule')
         self.transport, self.coupled_bridge = transport, coupled_bridge

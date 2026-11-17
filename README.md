@@ -1,6 +1,6 @@
-# CST-Flow
+# SAWR-Flow: Spatially Adaptive Wavelet Residual Flow for 3D Cross-Modal Medical Image Synthesis
 
-CST-Flow synthesizes a target medical volume in two stages. A frozen latent Flow generates a coarse target. A second Flow predicts a 3D Haar residual using spatial cross-modal subband coupling and local transport schedules for all eight subbands, including LLL.
+SAWR-Flow synthesizes a target medical volume in two stages. A frozen latent Flow generates a coarse target. A second Flow predicts a 3D Haar residual using spatial cross-modal subband coupling and local transport schedules for all eight subbands, including LLL.
 
 The default release configuration is **eight-band MRI→CT**. It preserves direct concatenation of the source and coarse target as a conditioning path. A learned local matrix adds conditioning features, and a separate bounded schedule head determines the timing of updates in each subband. The residual endpoint is supervised by the difference between the target and the coarse target.
 
@@ -25,7 +25,7 @@ Use Python 3.10 or later and a PyTorch 2.10 build compatible with your CUDA inst
 ```bash
 python -m pip install -r requirements.txt
 python -m unittest discover -s tests
-python scripts/smoke_ucf.py
+python scripts/smoke_sawr.py
 ```
 
 The synthetic smoke test runs training, exact checkpoint resume, held-out evaluation, and source-only NIfTI inference on CPU.
@@ -56,33 +56,33 @@ CUDA_VISIBLE_DEVICES=0 python train.py \
   --run-dir runs/anchor --anchor-only
 ```
 
-Train the eight-band CST residual. The default configuration uses seed 42, a fixed budget of 15 epochs, and two Euler steps.
+Train the eight-band SAWR residual. The default configuration uses seed 42, a fixed budget of 15 epochs, and two Euler steps.
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python train_ucf.py \
-  --config configs/cst_mri2ct.json \
+CUDA_VISIBLE_DEVICES=0 python train_sawr.py \
+  --config configs/sawr_mri2ct.json \
   --metadata data/split.csv --dataset-root data \
   --anchor runs/anchor/frozen/fold_0/flow/best.pt \
   --tensor-cache runs/cache/pairs --anchor-cache runs/cache/anchors \
-  --run-dir runs/cst
+  --run-dir runs/sawr
 ```
 
 Add `--resume` to the same command to continue from `last.pt`. Training saves `best.pt` by validation MAE and `last.pt` at each epoch boundary. Use the fixed-epoch `last.pt` for the comparisons below.
 
-`configs/cst_mri2pet.json` and `configs/cst_cbct2ct.json` provide eight-band configurations for those modalities. They are starting configurations for new experiments. The eight-band results below are for MRI→CT.
+`configs/sawr_mri2pet.json` and `configs/sawr_cbct2ct.json` provide eight-band configurations for those modalities. They are starting configurations for new experiments. The eight-band results below are for MRI→CT.
 
 ## Inference and evaluation
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python inference_ucf.py \
+CUDA_VISIBLE_DEVICES=0 python inference_sawr.py \
   --source data/mri/003.nii.gz --source-mask data/fov/003.nii.gz \
   --anchor runs/anchor/frozen/fold_0/flow/best.pt \
-  --checkpoint runs/cst/last.pt --output runs/generated_ct.nii.gz
+  --checkpoint runs/sawr/last.pt --output runs/generated_ct.nii.gz
 
-CUDA_VISIBLE_DEVICES=0 python evaluate_ucf.py \
+CUDA_VISIBLE_DEVICES=0 python evaluate_sawr.py \
   --metadata data/split.csv --dataset-root data \
   --anchor runs/anchor/frozen/fold_0/flow/best.pt \
-  --checkpoint runs/cst/last.pt --partition test --full-volume \
+  --checkpoint runs/sawr/last.pt --partition test --full-volume \
   --output-dir runs/evaluation
 ```
 
@@ -97,7 +97,11 @@ All rows use the same 18 held-out SynthRAD cases and frozen CT anchor. Residual 
 | Coarse CT | 57.31 | 28.118 | 0.88458 | 3.806 |
 | [Original residual Flow](https://github.com/Ednaqvq/mri-pet-wavelet-flow), adapted to CT | 47.99 | 29.409 | 0.90458 | 3.784 |
 | Direct concatenation with linear Flow | 47.83 | 29.399 | 0.90384 | 3.772 |
-| CST-Flow with seven-band scheduling | 47.66 | 29.451 | 0.90418 | **3.756** |
-| CST-Flow with eight-band scheduling | **46.83** | **29.468** | **0.90507** | 3.791 |
+| SAWR-Flow with seven-band scheduling | 47.66 | 29.451 | 0.90418 | **3.756** |
+| SAWR-Flow with eight-band scheduling | **46.83** | **29.468** | **0.90507** | 3.791 |
 
 Eight-band scheduling reduced the mean full-volume MAE by 0.83 HU relative to seven-band scheduling and improved seven subbands. Seven-band scheduling had the lowest HHH error on this split.
+
+## Compatibility
+
+The `train_sawr.py`, `inference_sawr.py`, and `evaluate_sawr.py` entry points use the existing implementation. The internal `ucf` package, checkpoint format, and parameter names are unchanged. Existing scripts and `cst_` configurations remain available; the corresponding `sawr_` configurations contain identical settings.

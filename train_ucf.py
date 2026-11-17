@@ -1,4 +1,4 @@
-"""Train CST-Flow on paired volumes using a frozen coarse generator."""
+"""Train SAWR-Flow on paired volumes using a frozen coarse generator."""
 import os
 os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
 import argparse
@@ -228,7 +228,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     for name in ('metadata','dataset-root','anchor','run-dir'):
         p.add_argument('--'+name,required=True)
-    p.add_argument('--config',default=str(Path(__file__).parent/'configs/cst_mri2ct.json'))
+    p.add_argument('--config',default=str(Path(__file__).parent/'configs/sawr_mri2ct.json'))
     p.add_argument('--device',default='cuda:0')
     p.add_argument('--seed',type=int)
     p.add_argument('--resume',action='store_true')

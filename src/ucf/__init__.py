@@ -1,1 +1,1 @@
-"""UCF-Flow MRI-to-PET research implementation."""
+"""SAWR-Flow: spatially adaptive wavelet residual generation."""

@@ -20,8 +20,8 @@ def main():
     for key in ('anchor', 'metadata', 'dataset-root', 'tensor-cache', 'anchor-cache', 'run-root', 'output-dir'):
         p.add_argument('--' + key, type=Path, required=True)
     p.add_argument('--epoch', type=int, required=True)
-    p.add_argument('--revised-run', type=Path, help='Include a matched revised CST checkpoint')
-    p.add_argument('--all-band-run', type=Path, help='Include revised CST with LLL scheduling enabled')
+    p.add_argument('--revised-run', type=Path, help='Include a matched revised SAWR checkpoint')
+    p.add_argument('--all-band-run', type=Path, help='Include revised SAWR with LLL scheduling enabled')
     p.add_argument('--device', default='cuda:0')
     a = p.parse_args()
     if a.all_band_run and not a.revised_run:
@@ -36,9 +36,9 @@ def main():
     arms = [('original_ct', 'original_ct', a.run_root/'original_ct'),
             ('concat_linear', 'ucf', a.run_root/'concat_linear')]
     if a.revised_run:
-        arms.append(('revised_cst', 'ucf', a.revised_run))
+        arms.append(('revised_sawr', 'ucf', a.revised_run))
     if a.all_band_run:
-        arms.append(('all_band_cst', 'ucf', a.all_band_run))
+        arms.append(('all_band_sawr', 'ucf', a.all_band_run))
     for name, architecture, run in arms:
         pred = Predictor(run/'last.pt', a.anchor, a.device)
         cfg, state = pred.cfg, pred.state
@@ -47,13 +47,13 @@ def main():
             raise ValueError('Unexpected architecture, budget or validation metric')
         common = {k: v for k, v in cfg.items() if k != 'architecture'}
         if architecture == 'ucf':
-            revised = name in ('revised_cst', 'all_band_cst')
+            revised = name in ('revised_sawr', 'all_band_sawr')
             if (pred.model.conditioning_input != ('residual_matrix' if revised else 'concat')
                     or pred.model.coupled_bridge or pred.model.spatial_schedule != revised
-                    or pred.model.schedule_lll != (name == 'all_band_cst')
+                    or pred.model.schedule_lll != (name == 'all_band_sawr')
                     or pred.model.targets != ['ct'] or pred.model.interior_hhh_gain != 1):
                 raise ValueError(f'Unexpected conditioning or path for {name}')
-        if name in ('revised_cst', 'all_band_cst'):
+        if name in ('revised_sawr', 'all_band_sawr'):
             common['model'] = dict(common['model'], conditioning_input='concat')
             common['model'].pop('spatial_schedule')
             common['model'].pop('schedule_lll', None)
@@ -91,12 +91,12 @@ def main():
                  ('original_minus_coarse', original[keys]-coarse),
                  ('concat_minus_coarse', concat[keys]-coarse)]
     if a.revised_run:
-        revised = tables['revised_cst'][keys]
+        revised = tables['revised_sawr'][keys]
         contrasts += [('revised_minus_original', revised-original[keys]),
                       ('revised_minus_concat', revised-concat[keys]),
                       ('revised_minus_coarse', revised-coarse)]
     if a.all_band_run:
-        all_band = tables['all_band_cst'][keys]
+        all_band = tables['all_band_sawr'][keys]
         contrasts += [('all_band_minus_revised', all_band-revised),
                       ('all_band_minus_original', all_band-original[keys]),
                       ('all_band_minus_concat', all_band-concat[keys]),

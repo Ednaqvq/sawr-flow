@@ -1,4 +1,4 @@
-"""Source-only NIfTI inference for CST-Flow."""
+"""Source-only NIfTI inference for SAWR-Flow."""
 import os
 os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
 import argparse
@@ -93,7 +93,7 @@ class Predictor:
         nib.save(nib.Nifti1Image(out,affine),output)
         effective_steps = steps if steps is not None else self.cfg['loss']['steps']
         effective_solver = solver or self.cfg['loss']['solver']
-        method = f'CST-Flow {self.model.sources[0].upper()}2{self.model.targets[0].upper()}'
+        method = f'SAWR-Flow {self.model.sources[0].upper()}2{self.model.targets[0].upper()}'
         info = dict(method=method,shape=list(out.shape),affine=affine.tolist(),
                     steps=effective_steps,solver=effective_solver,
                     residual_nfe=effective_steps*(2 if effective_solver=='heun' else 1),
