@@ -67,9 +67,9 @@ CUDA_VISIBLE_DEVICES=0 python train_sawr.py \
   --run-dir runs/sawr
 ```
 
-Add `--resume` to the same command to continue from `last.pt`. Training saves `best.pt` by validation MAE and `last.pt` at each epoch boundary. Use the fixed-epoch `last.pt` for the comparisons below.
+Add `--resume` to the same command to continue from `last.pt`. Training saves `best.pt` by validation MAE and `last.pt` at each epoch boundary.
 
-`configs/sawr_mri2pet.json` and `configs/sawr_cbct2ct.json` provide eight-band configurations for those modalities. They are starting configurations for new experiments. The eight-band results below are for MRI→CT.
+`configs/sawr_mri2pet.json` and `configs/sawr_cbct2ct.json` provide eight-band configurations for those modalities. They are starting configurations for new experiments.
 
 ## Inference and evaluation
 
@@ -88,19 +88,6 @@ CUDA_VISIBLE_DEVICES=0 python evaluate_sawr.py \
 
 CT inference writes a NIfTI in HU and a JSON sidecar with the model and anchor hashes. Full-volume evaluation includes all voxels and all Haar blocks. It saves per-scan, per-subject and aggregate results, including CT MAE in HU and the eight subband MAEs. Run `python scripts/compare_ct_full_volume.py --help` for the paired comparison using the supplied ablation configurations.
 
-## MRI→CT reference results
-
-All rows use the same 18 held-out SynthRAD cases and frozen CT anchor. Residual comparisons use seed 42, epoch 15, and two Euler steps. HHH is reported in normalized Haar coefficient units × 1,000.
-
-| Method | Full MAE ↓ (HU) | PSNR ↑ (dB) | SSIM ↑ | HHH MAE ↓ |
-|---|---:|---:|---:|---:|
-| Coarse CT | 57.31 | 28.118 | 0.88458 | 3.806 |
-| [Original residual Flow](https://github.com/Ednaqvq/mri-pet-wavelet-flow), adapted to CT | 47.99 | 29.409 | 0.90458 | 3.784 |
-| Direct concatenation with linear Flow | 47.83 | 29.399 | 0.90384 | 3.772 |
-| SAWR-Flow with seven-band scheduling | 47.66 | 29.451 | 0.90418 | **3.756** |
-| SAWR-Flow with eight-band scheduling | **46.83** | **29.468** | **0.90507** | 3.791 |
-
-Eight-band scheduling reduced the mean full-volume MAE by 0.83 HU relative to seven-band scheduling and improved seven subbands. Seven-band scheduling had the lowest HHH error on this split.
 
 ## Compatibility
 
